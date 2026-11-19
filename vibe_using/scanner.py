@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-from typing import Any, Callable, Iterable, Protocol
+from typing import Any, Callable, Iterable, Mapping, Protocol
 
 from .models import Node, ScanResult, WindowInfo
 from .knowledge import enrich_nodes
@@ -44,6 +44,7 @@ def scan_process(
     limits: Limits = Limits(),
     *,
     clock: Callable[[], float] = time.monotonic,
+    roots_by_hwnd: Mapping[int, Any] | None = None,
 ) -> ScanResult:
     selected = [w for w in windows if w.pid == pid]
     result = ScanResult(pid=pid, title=selected[0].title if selected else "", windows=selected)
@@ -59,7 +60,7 @@ def scan_process(
             result.truncated = True
             break
         try:
-            root = adapter.from_handle(window.hwnd)
+            root = roots_by_hwnd[window.hwnd] if roots_by_hwnd and window.hwnd in roots_by_hwnd else adapter.from_handle(window.hwnd)
         except Exception as exc:
             result.errors.append(f"HWND {window.hwnd}: cannot inspect root: {type(exc).__name__}: {exc}")
             continue

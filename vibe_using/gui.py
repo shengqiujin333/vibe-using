@@ -186,6 +186,10 @@ class InventoryApp:
         self.busy = True
         self.scan_button.configure(state="disabled")
         self.status.set(f"扫描 PID {selected.pid}，扫描期间请勿关闭目标软件窗口…")
+        # The GUI itself can cover the target window. Hide only our own window
+        # while the read-only screen point fallback probes visible app regions.
+        # Restoration is always handled by _pump, on success or failure.
+        self.root.withdraw()
         thread = threading.Thread(
             target=self._scan_worker,
             args=(selected_windows, selected.pid, limits, self.include_text.get()),
@@ -208,6 +212,7 @@ class InventoryApp:
         try:
             while True:
                 kind, data = self.messages.get_nowait()
+                self.root.deiconify()
                 self.busy = False
                 self.scan_button.configure(state="normal")
                 if kind == "error":

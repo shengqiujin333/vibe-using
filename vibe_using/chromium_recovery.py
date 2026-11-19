@@ -36,11 +36,13 @@ def missing_chromium_contents_data(nodes: list[dict]) -> bool:
             not any(n.get("role") == "DocumentControl" for n in nodes))
 
 
-def coverage_warning(*, attempted: bool, activated: int = 0, renderer_count: int = 0) -> str:
+def coverage_warning(*, attempted: bool, activated: int = 0, renderer_count: int = 0, root_requests: int = 0) -> str:
     if not attempted:
         detail = "没有执行恢复尝试。"
+    elif not renderer_count and root_requests:
+        detail = f"没有独立渲染子窗口，已尝试向 Chromium 顶层窗口发送 {root_requests} 次辅助功能请求。"
     elif not renderer_count:
-        detail = "没有找到 Chromium 渲染子窗口，因此无法发送辅助功能激活请求。"
+        detail = "没有独立渲染子窗口，也没有找到可尝试的 Chromium 顶层窗口。"
     elif not activated:
         detail = "已找到渲染子窗口，但辅助功能激活请求失败或超时。"
     else:

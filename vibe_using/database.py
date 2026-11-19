@@ -84,7 +84,7 @@ class InventoryDB:
             nodes = conn.execute("SELECT data_json FROM nodes WHERE scan_id=? ORDER BY id", (scan_id,)).fetchall()
         parsed = [json.loads(n["data_json"]) for n in nodes]
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "capture_mode": "read_only",
             "platform": "windows-uia",
             "scan_id": scan_id,
@@ -95,7 +95,12 @@ class InventoryDB:
             "errors": json.loads(scan["errors_json"]),
             "truncated": bool(scan["truncated"]),
             "nodes": parsed,
-            "summary": {"nodes": len(parsed), "action_candidates": sum(n["action_candidate"] for n in parsed)},
+            "summary": {
+                "nodes": len(parsed),
+                "named": sum(bool(n.get("name")) for n in parsed),
+                "action_candidates": sum(n["action_candidate"] for n in parsed),
+                "named_action_candidates": sum(bool(n.get("name")) and n["action_candidate"] for n in parsed),
+            },
             "disclaimer": "This is a partial UI snapshot, not a verified complete function list.",
         }
 
@@ -104,12 +109,13 @@ class InventoryDB:
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped}%"
         where_scan = " AND scan_id=?" if scan_id is not None else ""
-        params: tuple[Any, ...] = (pattern, pattern, pattern, pattern) + ((scan_id,) if scan_id is not None else ()) + (limit,)
+        params: tuple[Any, ...] = (pattern, pattern, pattern, pattern, pattern) + ((scan_id,) if scan_id is not None else ()) + (limit,)
         with self._connect() as conn:
             rows = conn.execute(f"""
                 SELECT scan_id,data_json FROM nodes
                 WHERE (name LIKE ? ESCAPE '\\' OR role LIKE ? ESCAPE '\\'
-                    OR automation_id LIKE ? ESCAPE '\\' OR class_name LIKE ? ESCAPE '\\')
+                    OR automation_id LIKE ? ESCAPE '\\' OR class_name LIKE ? ESCAPE '\\'
+                    OR data_json LIKE ? ESCAPE '\\')
                     {where_scan}
                 ORDER BY scan_id DESC,id LIMIT ?
             """, params).fetchall()

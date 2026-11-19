@@ -11,7 +11,7 @@ from .text_report import default_report_path, format_text_report
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Read-only Windows UI inventory; stores local SQLite snapshots")
+    p = argparse.ArgumentParser(description="Read-only Windows UI control/function inventory; exports readable TXT")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--list-windows", action="store_true", help="List visible titled top-level windows")
     mode.add_argument("--scan-pid", type=int, metavar="PID", help="Scan visible windows belonging to PID")
@@ -25,7 +25,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--max-depth", type=int, default=12)
     p.add_argument("--max-nodes", type=int, default=6000)
     p.add_argument("--max-seconds", type=float, default=30.0)
-    p.add_argument("--include-text", action="store_true", help="Include potentially sensitive text/edit/document names")
+    p.add_argument("--include-text", action="store_true", help="Also include potentially sensitive Edit/Document names (TextControl labels are included by default)")
     return p
 
 

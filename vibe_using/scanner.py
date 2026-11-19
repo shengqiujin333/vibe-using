@@ -10,6 +10,7 @@ import time
 from typing import Any, Callable, Iterable, Protocol
 
 from .models import Node, ScanResult, WindowInfo
+from .knowledge import enrich_nodes
 
 ACTION_ROLES = frozenset({
     "ButtonControl", "MenuItemControl", "HyperlinkControl", "TabItemControl",
@@ -75,6 +76,8 @@ def scan_process(
                 for key in (
                     "role", "name", "automation_id", "class_name", "access_key",
                     "accelerator_key", "enabled", "offscreen", "rect",
+                    "raw_name", "name_source", "labeled_by", "legacy_action", "help_text",
+                    "localized_control_type", "supported_patterns",
                 ):
                     if key in info:
                         setattr(node, key, info[key])
@@ -96,4 +99,5 @@ def scan_process(
             # Reverse for stable UI order under iterative DFS.
             for child in reversed(children):
                 stack.append((child, node.id, hwnd, depth + 1))
+    enrich_nodes(result.nodes)
     return result

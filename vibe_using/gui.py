@@ -1,4 +1,4 @@
-"""Tk desktop interface for inspecting Windows UIA snapshots."""
+"""Tk desktop interface for inspecting Windows UIA functionality evidence."""
 from __future__ import annotations
 
 import json
@@ -20,7 +20,7 @@ from .win32 import list_windows
 class InventoryApp:
     def __init__(self, root: tk.Tk, db_path: str):
         self.root = root
-        root.title("Vibe Using — Windows 界面发现器 (只读)")
+        root.title("Vibe Using — Windows 控件与功能入口发现器 (只读)")
         root.geometry("1180x780")
         self.db = InventoryDB(db_path)
         self.windows: list[WindowInfo] = []
@@ -51,7 +51,7 @@ class InventoryApp:
         ttk.Entry(controls, textvariable=self.max_depth, width=5).pack(side="left", padx=(4, 10))
         ttk.Label(controls, text="最大控件数").pack(side="left")
         ttk.Entry(controls, textvariable=self.max_nodes, width=8).pack(side="left", padx=(4, 10))
-        ttk.Checkbutton(controls, text="包含文本/输入框名称（可能含隐私）", variable=self.include_text).pack(side="left")
+        ttk.Checkbutton(controls, text="额外采集输入框/文档名称（可能含隐私）", variable=self.include_text).pack(side="left")
         ttk.Label(controls, text="扫描限时 30 秒（单次 UIA 调用可能阻塞）", foreground="#777").pack(side="right")
 
         panes = ttk.Panedwindow(outer, orient="horizontal")
@@ -94,7 +94,7 @@ class InventoryApp:
 
         search_row = ttk.Frame(right)
         search_row.pack(fill="x")
-        ttk.Label(search_row, text="查询控件").pack(side="left")
+        ttk.Label(search_row, text="查名称/作用/路径").pack(side="left")
         input_widget = ttk.Entry(search_row, textvariable=self.query)
         input_widget.pack(side="left", fill="x", expand=True, padx=8)
         input_widget.bind("<Return>", lambda _e: self.search())
@@ -109,17 +109,21 @@ class InventoryApp:
         result_scroll.pack(side="right", fill="y")
         self.results.configure(yscrollcommand=result_scroll.set)
 
-        ttk.Label(right, text="UI Automation 控件层级（只读取实际暴露的元素）").pack(anchor="w")
+        ttk.Label(right, text="控件与功能入口（名称、作用和操作均保留证据/验证状态）").pack(anchor="w")
         tree_frame = ttk.Frame(right)
         tree_frame.pack(fill="both", expand=True, pady=5)
-        self.tree = ttk.Treeview(tree_frame, columns=("role", "name", "aid"), show="tree headings")
+        self.tree = ttk.Treeview(tree_frame, columns=("name", "role", "purpose", "operation", "aid"), show="tree headings")
         self.tree.heading("#0", text="节点 ID")
-        self.tree.heading("role", text="控件类型")
-        self.tree.heading("name", text="名称")
+        self.tree.heading("name", text="控件名称")
+        self.tree.heading("role", text="类型")
+        self.tree.heading("purpose", text="作用（推测/提示）")
+        self.tree.heading("operation", text="怎么操作（接口/待确认）")
         self.tree.heading("aid", text="Automation ID")
         self.tree.column("#0", width=92, stretch=False)
-        self.tree.column("role", width=140, stretch=False)
-        self.tree.column("name", width=235, stretch=True)
+        self.tree.column("name", width=170, stretch=True)
+        self.tree.column("role", width=125, stretch=False)
+        self.tree.column("purpose", width=190, stretch=True)
+        self.tree.column("operation", width=185, stretch=True)
         self.tree.column("aid", width=135, stretch=True)
         tree_scroll_y = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         tree_scroll_x = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
@@ -229,7 +233,9 @@ class InventoryApp:
             if parent and not self.tree.exists(parent):
                 parent = ""
             self.tree.insert(parent, "end", iid=str(node["id"]), text=f"#{node['id']}",
-                             values=(node["role"], node["name"], node["automation_id"]))
+                             values=(node.get("name") or "(未获取)", node["role"],
+                                     node.get("purpose") or "未知", node.get("operation") or "待重新扫描",
+                                     node["automation_id"]))
         for item in self.tree.get_children():
             self.tree.item(item, open=True)
         self.results.delete(0, "end")
@@ -256,12 +262,12 @@ class InventoryApp:
     def search(self) -> None:
         query = self.query.get().strip()
         if not query:
-            self.status.set("请输入要查询的控件名称或类型。")
+            self.status.set("请输入要查询的控件名称、作用或位置。")
             return
         self.search_matches = self.db.search(query, self.active_scan_id, limit=200)
         self.results.delete(0, "end")
         for node in self.search_matches:
-            self.results.insert("end", f"#{node['id']} [{node['role']}] {node['name']}  (扫描 {node['scan_id']})")
+            self.results.insert("end", f"#{node['id']} [{node['role']}] {node.get('name') or '(未获取)'}  (扫描 {node['scan_id']})")
         self.status.set(f"搜索到 {len(self.search_matches)} 个匹配项（最多展示 200 个）。双击跳转。")
 
     def focus_result(self, _event: Any = None) -> None:

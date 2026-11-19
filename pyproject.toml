@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vibe-using"
-version = "0.1.0"
-description = "Read-only Windows UI Automation inventory and searchable local knowledge base"
+version = "0.3.0"
+description = "Read-only Windows UI controls and function-entry knowledge inventory"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{name = "vibe-using contributors"}]

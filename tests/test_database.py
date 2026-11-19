@@ -43,7 +43,7 @@ class DatabaseTests(unittest.TestCase):
         scan_id = self.db.save(self.scan)
         path = self.db.export_json(scan_id, Path(self.tmp.name) / "exports" / "out.json")
         data = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["schema_version"], 2)
         self.assertEqual(data["nodes"][1]["name"], "导出_100%")
         with self.assertRaises(KeyError):
             self.db.get(999)

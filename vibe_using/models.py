@@ -29,6 +29,19 @@ class Node:
     rect: list[int] | None = None
     action_candidate: bool = False
     error: str = ""
+    # v0.3 richer, inspectable UIA evidence. Existing JSON snapshots remain readable.
+    raw_name: str = ""
+    name_source: str = ""
+    labeled_by: str = ""
+    legacy_action: str = ""
+    help_text: str = ""
+    localized_control_type: str = ""
+    supported_patterns: list[str] = field(default_factory=list)
+    operation: str = ""
+    operation_source: str = ""
+    purpose: str = ""
+    purpose_source: str = ""
+    path: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -45,7 +58,7 @@ class ScanResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "platform": "windows-uia",
             "capture_mode": "read_only",
             "pid": self.pid,
@@ -57,7 +70,9 @@ class ScanResult:
             "summary": {
                 "windows": len(self.windows),
                 "nodes": len(self.nodes),
+                "named": sum(bool(n.name) for n in self.nodes),
                 "action_candidates": sum(n.action_candidate for n in self.nodes),
+                "named_action_candidates": sum(bool(n.name) and n.action_candidate for n in self.nodes),
             },
-            "disclaimer": "Discovered UI elements, not a verified complete function list or SOP.",
+            "disclaimer": "Observed UIA evidence and unverified operation hints, not a complete or validated functionality catalog.",
         }

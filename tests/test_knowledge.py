@@ -26,20 +26,20 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(nodes[1].purpose_source, "name_guess_unverified")
 
     def test_operation_and_help_are_distinguished_from_guess(self):
-        nodes = [Node(1, None, 23, 0, "ButtonControl", name="生成", help_text="生成目标文件", supported_patterns=["Invoke"], accelerator_key="Ctrl+G", action_candidate=True)]
+        nodes = [Node(1, None, 23, 0, "ButtonControl", name="生成", help_text="生成目标文件", supported_patterns=["Invoke"], accelerator_key="Ctrl+G", action_candidate=True, rect=[5, 5, 90, 30])]
         enrich_nodes(nodes)
         self.assertEqual(nodes[0].purpose, "生成目标文件")
         self.assertEqual(nodes[0].purpose_source, "uia_helptext_unverified")
         self.assertIn("UIA Invoke", nodes[0].operation)
         self.assertIn("Ctrl+G", nodes[0].operation)
         report = format_text_report(ScanResult(pid=8, title="App", windows=[WindowInfo(23, 8, "App")], nodes=nodes))
-        self.assertIn("一、可识别的功能与菜单入口", report)
+        self.assertIn("一、当前可定位的功能与菜单入口", report)
         self.assertIn("在哪里: 生成", report)
         self.assertIn("作用: 生成目标文件", report)
         self.assertIn("怎么操作: UIA Invoke", report)
 
     def test_menu_group_included_in_primary_list(self):
-        nodes = [Node(1, None, 12, 0, "PaneControl", name="主窗口"), Node(2, 1, 12, 1, "GroupControl", name="文件")]
+        nodes = [Node(1, None, 12, 0, "PaneControl", name="主窗口"), Node(2, 1, 12, 1, "GroupControl", name="文件", rect=[5, 5, 90, 30])]
         enrich_nodes(nodes)
         report = format_text_report(ScanResult(pid=8, title="App", windows=[WindowInfo(12, 8, "App")], nodes=nodes))
         self.assertIn("#2 文件 [GroupControl]", report)
@@ -47,7 +47,7 @@ class KnowledgeTests(unittest.TestCase):
         self.assertIn("根据名称推测", report)
 
     def test_unknown_is_not_invented(self):
-        nodes = [Node(1, None, 10, 0, "ButtonControl", name="自定义指令", action_candidate=True)]
+        nodes = [Node(1, None, 10, 0, "ButtonControl", name="自定义指令", action_candidate=True, rect=[5, 5, 90, 30])]
         enrich_nodes(nodes)
         report = format_text_report(ScanResult(pid=5, title="App", windows=[WindowInfo(10, 5, "App")], nodes=nodes))
         self.assertIn("未知；不能仅凭控件类型确定功能", report)

@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from .control_visibility import location_explanation, location_status, tree_visible_ids
 from .database import InventoryDB
 from .models import WindowInfo
 from .scanner import Limits
@@ -32,6 +33,7 @@ class InventoryApp:
         self.messages: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.busy = False
         self.include_text = tk.BooleanVar(value=False)
+        self.only_located = tk.BooleanVar(value=True)
         self.max_depth = tk.StringVar(value="12")
         self.max_nodes = tk.StringVar(value="6000")
         self.status = tk.StringVar(value="准备就绪。扫描不会点击或修改目标软件。")
@@ -109,19 +111,25 @@ class InventoryApp:
         result_scroll.pack(side="right", fill="y")
         self.results.configure(yscrollcommand=result_scroll.set)
 
-        ttk.Label(right, text="控件与功能入口（名称、作用和操作均保留证据/验证状态）").pack(anchor="w")
+        filter_row = ttk.Frame(right)
+        filter_row.pack(fill="x")
+        ttk.Label(filter_row, text="控件与功能入口（位置状态来自 UIA，操作未验证）").pack(side="left")
+        ttk.Checkbutton(filter_row, text="隐藏无效矩形/屏幕外控件", variable=self.only_located,
+                        command=self.render_tree).pack(side="right")
         tree_frame = ttk.Frame(right)
         tree_frame.pack(fill="both", expand=True, pady=5)
-        self.tree = ttk.Treeview(tree_frame, columns=("name", "role", "purpose", "operation", "aid"), show="tree headings")
+        self.tree = ttk.Treeview(tree_frame, columns=("name", "role", "location", "purpose", "operation", "aid"), show="tree headings")
         self.tree.heading("#0", text="节点 ID")
         self.tree.heading("name", text="控件名称")
         self.tree.heading("role", text="类型")
+        self.tree.heading("location", text="屏幕位置")
         self.tree.heading("purpose", text="作用（推测/提示）")
         self.tree.heading("operation", text="怎么操作（接口/待确认）")
         self.tree.heading("aid", text="Automation ID")
         self.tree.column("#0", width=92, stretch=False)
         self.tree.column("name", width=170, stretch=True)
         self.tree.column("role", width=125, stretch=False)
+        self.tree.column("location", width=130, stretch=False)
         self.tree.column("purpose", width=190, stretch=True)
         self.tree.column("operation", width=185, stretch=True)
         self.tree.column("aid", width=135, stretch=True)
@@ -227,17 +235,7 @@ class InventoryApp:
         self.active_report_path = default_report_path(scan_id, record["pid"]).resolve()
         self.report_label.set(f"TXT 报告：{self.active_report_path}")
         self.current_nodes = {n["id"]: n for n in record["nodes"]}
-        self.tree.delete(*self.tree.get_children())
-        for node in record["nodes"]:
-            parent = str(node["parent_id"]) if node["parent_id"] is not None else ""
-            if parent and not self.tree.exists(parent):
-                parent = ""
-            self.tree.insert(parent, "end", iid=str(node["id"]), text=f"#{node['id']}",
-                             values=(node.get("name") or "(未获取)", node["role"],
-                                     node.get("purpose") or "未知", node.get("operation") or "待重新扫描",
-                                     node["automation_id"]))
-        for item in self.tree.get_children():
-            self.tree.item(item, open=True)
+        self.render_tree()
         self.results.delete(0, "end")
         self.details.configure(state="normal")
         self.details.delete("1.0", "end")
@@ -246,6 +244,31 @@ class InventoryApp:
                             f"截断={record['truncated']}\n注意：只能识别当前可见的窗口与暴露的结构，未验证功能意义。")
         self.details.configure(state="disabled")
         self.status.set(f"已载入扫描 #{scan_id}（{len(record['nodes'])} 个控件）。")
+
+    def render_tree(self) -> None:
+        """Show positive-size controls plus ancestors by default; all UIA nodes remain saved."""
+        if not hasattr(self, "tree"):
+            return
+        self.tree.delete(*self.tree.get_children())
+        nodes = list(self.current_nodes.values())
+        visible_ids = tree_visible_ids(nodes, only_located=self.only_located.get())
+        for node in nodes:
+            if node["id"] not in visible_ids:
+                continue
+            parent = str(node["parent_id"]) if node["parent_id"] is not None else ""
+            if parent and not self.tree.exists(parent):
+                parent = ""
+            status = location_status(node)
+            label = "可定位" if status == "located" else "屏幕外" if status == "offscreen" else "无有效矩形"
+            self.tree.insert(parent, "end", iid=str(node["id"]), text=f"#{node['id']}",
+                             values=(node.get("name") or "(未获取)", node["role"], label,
+                                     node.get("purpose") or "未知", node.get("operation") or "待重新扫描",
+                                     node.get("automation_id") or ""))
+        for item in self.tree.get_children():
+            self.tree.item(item, open=True)
+        if self.active_scan_id is not None:
+            self.status.set(f"扫描 #{self.active_scan_id}: 已显示 {len(visible_ids)}/{len(nodes)} 节点；"
+                            "隐藏项仍在 TXT 完整树中。取消筛选可查看全部。")
 
     def show_details(self, _event: Any = None) -> None:
         selection = self.tree.selection()
@@ -256,6 +279,8 @@ class InventoryApp:
             return
         self.details.configure(state="normal")
         self.details.delete("1.0", "end")
+        self.details.insert("end", f"位置判断: {location_explanation(node)}\n"
+                            "注：UIA 操作模式不表示当前一定能够点击或切换。\n\n")
         self.details.insert("end", json.dumps(node, ensure_ascii=False, indent=2))
         self.details.configure(state="disabled")
 
@@ -278,6 +303,9 @@ class InventoryApp:
         if match["scan_id"] != self.active_scan_id:
             self.load_snapshot(match["scan_id"])
         iid = str(match["id"])
+        if not self.tree.exists(iid) and self.only_located.get():
+            self.only_located.set(False)
+            self.render_tree()
         if self.tree.exists(iid):
             ancestor = self.tree.parent(iid)
             while ancestor:

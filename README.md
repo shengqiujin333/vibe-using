@@ -9,8 +9,8 @@
 - 枚举 Windows 当前**可见且有标题**的顶层窗口，按 PID 选定软件。
 - 扫描同一 PID 的已枚举顶层窗口及它们可访问的 UIA 子控件；采集层级、角色/类型、名称、AutomationId、ClassName、键盘快捷键属性、启用状态、边界框。
 - 限制最大深度、节点数和扫描时间；记录不可访问/读取失败，明确标记截断；注意某一次 UIA API 调用可能超时阻塞，时间限制不是强制杀进程。
-- 保存每次扫描到本机 **SQLite**；GUI 树形浏览、属性检查、搜索，保留历史记录，导出 JSON。
-- 命令行列出窗口、指定 PID 扫描、历史搜索和 JSON 导出。
+- 保存每次扫描到本机 **SQLite**；GUI 树形浏览、属性检查、搜索，保留历史记录；**扫描后自动生成并打开 TXT 文本报告**，也可另存 TXT/导出 JSON。
+- 命令行列出窗口、指定 PID 扫描、历史搜索和 TXT/JSON 导出；扫描会**直接在终端打印完整控件树**。
 - 根据控件类型标出 **action_candidate（候选交互控件）**；这是启发式分类，**不是已经验证的业务功能或操作 SOP**。
 - 默认不保存 Text/Edit/Document 类型控件的 Name，也不读取 ValuePattern/输入框值；密码控件的 Name 始终被清除。
 
@@ -35,7 +35,9 @@ python -m vibe_using
 2. 运行 `python -m vibe_using`，点击“刷新窗口”。
 3. 选择目标软件窗口，点击“扫描选中软件”。同一进程的可见窗口会一起扫描。
 4. 在右侧查看 UIA 控件层级，点击节点查看属性，使用搜索框定位控件。
-5. 通过“导出 JSON”保存快照，作为下一步功能语义识别和 SOP 设计的输入。
+5. **扫描结束后自动生成并打开 `.txt` 文件**，可以直接在记事本看界面和控件树。左侧还有“打开 TXT”和“另存 TXT”按钮，**无需打开 SQLite**。
+
+默认 TXT 保存位置：**运行命令的目录下 `scans` 文件夹**。例如从 `E:\learn\vibe-using` 运行，就保存在 `E:\learn\vibe-using\scans\scan-扫描编号-pid-进程号.txt`。使用 UTF-8 BOM，中文记事本可直接打开。
 
 ### 命令行 / 无 GUI
 
@@ -44,13 +46,20 @@ python -m vibe_using
 python -m vibe_using --list-windows
 
 # 把 PID 替换成真实进程 ID；仅扫描，不点击
-python -m vibe_using --scan-pid 1234 --max-depth 10 --max-nodes 5000 --output scan-notepad.json
+# 将控件树直接打印在 PowerShell，同时自动生成 scans\scan-N-pid-1234.txt
+python -m vibe_using --scan-pid 1234 --max-depth 10 --max-nodes 5000
+
+# 仍支持可选的 JSON 导出
+python -m vibe_using --scan-pid 1234 --output scan-notepad.json
 
 # 在已采集的快照中搜索；可按扫描号过滤
 python -m vibe_using --search "Button"
 python -m vibe_using --search "保存" --scan-id 1
 
-# 从数据库导出历史快照
+# 将历史扫描重新导出为 TXT（可选自定义位置）
+python -m vibe_using --export-txt 1 --output scan-1.txt
+
+# 如需要机器处理数据，也能导出 JSON
 python -m vibe_using --export-scan 1 --output exports/scan-1.json
 
 # 特别需要 Text/Edit/Document 名称时，显式开启（可能含敏感数据）
@@ -67,7 +76,8 @@ vibe_using/
   uia_backend.py    # UIA 属性读取，不进行 Invoke/Click/SetValue
   scanner.py        # 有界控件树遍历，可注入模拟后端
   models.py         # 结构化扫描契约
-  database.py       # SQLite 持久化、检索、JSON 导出
+  database.py       # SQLite 持久化、检索、TXT/JSON 导出
+  text_report.py    # 人类可读的树形 TXT 报告
   gui.py            # Tkinter 树形浏览界面
   cli.py            # 命令行入口
   service.py        # UIA 扫描启动和 COM 生命周期
@@ -80,7 +90,7 @@ vibe_using/
 - **本版本不主动探索。** 为安全起见不会自动展开菜单或修改目标状态；后续可增加独立的、需授权的沙箱探索 Agent。
 - **进程并非软件边界。** 多进程 Electron/浏览器应用可能需要分别扫描不同 PID；具有系统级权限差异的窗口可能返回部分节点或访问失败。
 - **GUI 名称不是语义真相。** “导出”按钮仅为一个发现结果，其业务作用、输入、输出、前置条件和正确性尚未验证。
-- **扫描不保证完全无个人信息。** 窗口标题、菜单/按钮名称、AutomationId 仍可能包含文件名、账号或组织信息。SQLite/导出 JSON 仅存本地，发送给第三方前请人工检查。
+- **扫描不保证完全无个人信息。** 窗口标题、菜单/按钮名称、AutomationId 仍可能包含文件名、账号或组织信息。SQLite/TXT/JSON 都只存本地，发送给第三方前请人工检查。
 - **不绕过权限或付费。** 仅在用户授权、正常登录的交互式桌面操作，禁止用作绕过访问控制或网站限制。
 
 ## 自动测试

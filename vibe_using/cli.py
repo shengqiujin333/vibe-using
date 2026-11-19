@@ -7,6 +7,7 @@ import sys
 
 from .database import DEFAULT_DB, InventoryDB
 from .scanner import Limits
+from .text_report import default_report_path, format_text_report
 
 
 def parser() -> argparse.ArgumentParser:
@@ -15,9 +16,11 @@ def parser() -> argparse.ArgumentParser:
     mode.add_argument("--list-windows", action="store_true", help="List visible titled top-level windows")
     mode.add_argument("--scan-pid", type=int, metavar="PID", help="Scan visible windows belonging to PID")
     mode.add_argument("--export-scan", type=int, metavar="ID", help="Export saved scan as JSON")
+    mode.add_argument("--export-txt", type=int, metavar="ID", help="Export saved scan as readable TXT")
     mode.add_argument("--search", metavar="QUERY", help="Search saved scan nodes by label/role/ID")
     p.add_argument("--db", default=str(DEFAULT_DB), help="SQLite DB file (default: ~/.vibe-using/inventory.sqlite3)")
-    p.add_argument("--output", help="JSON output path for --scan-pid or --export-scan")
+    p.add_argument("--output", help="JSON output path for --scan-pid/--export-scan; TXT path for --export-txt")
+    p.add_argument("--reports-dir", default="scans", help="Automatic TXT folder for --scan-pid (default: ./scans)")
     p.add_argument("--scan-id", type=int, help="Filter --search to one scan")
     p.add_argument("--max-depth", type=int, default=12)
     p.add_argument("--max-nodes", type=int, default=6000)
@@ -51,12 +54,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         db = InventoryDB(args.db)
         scan_id = db.save(result)
-        output = {"scan_id": scan_id, **result.to_dict()}
+        output = db.get(scan_id)
+        report_path = db.export_txt(scan_id, default_report_path(scan_id, result.pid, args.reports_dir))
         if args.output:
             db.export_json(scan_id, args.output)
-        print(json.dumps(output, indent=2, ensure_ascii=False))
+        print(format_text_report(output))
+        print(f"TXT 已保存: {report_path.resolve()}")
         return 0
-    if args.export_scan is not None or args.search is not None:
+    if args.export_scan is not None or args.export_txt is not None or args.search is not None:
         db = InventoryDB(args.db)
         try:
             if args.export_scan is not None:
@@ -64,6 +69,11 @@ def main(argv: list[str] | None = None) -> int:
                     parser().error("--export-scan requires --output")
                 path = db.export_json(args.export_scan, args.output)
                 print(path)
+            elif args.export_txt is not None:
+                record = db.get(args.export_txt)
+                path = args.output or default_report_path(args.export_txt, record["pid"])
+                path = db.export_txt(args.export_txt, path)
+                print(path.resolve())
             else:
                 matches = db.search(args.search, args.scan_id)
                 print(json.dumps(matches, indent=2, ensure_ascii=False))

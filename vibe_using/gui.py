@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 import queue
 import threading
 import tkinter as tk
@@ -11,6 +13,7 @@ from typing import Any
 from .database import InventoryDB
 from .models import WindowInfo
 from .scanner import Limits
+from .text_report import default_report_path
 from .win32 import list_windows
 
 
@@ -23,6 +26,8 @@ class InventoryApp:
         self.windows: list[WindowInfo] = []
         self.snapshots: list[dict[str, Any]] = []
         self.active_scan_id: int | None = None
+        self.active_report_path: Path | None = None
+        self.report_label = tk.StringVar(value="扫描后自动生成 scans 文件夹下的 TXT 报告")
         self.current_nodes: dict[int, dict[str, Any]] = {}
         self.messages: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.busy = False
@@ -82,7 +87,10 @@ class InventoryApp:
         row = ttk.Frame(left)
         row.pack(fill="x")
         ttk.Button(row, text="打开扫描", command=self.open_selected_snapshot).pack(side="left", padx=(0, 5))
+        ttk.Button(row, text="打开 TXT", command=self.open_text_current).pack(side="left", padx=(0, 5))
+        ttk.Button(row, text="另存 TXT", command=self.export_text_current).pack(side="left", padx=(0, 5))
         ttk.Button(row, text="导出 JSON", command=self.export_current).pack(side="left")
+        ttk.Label(left, textvariable=self.report_label, wraplength=350, foreground="#155e75").pack(anchor="w", pady=(5, 0))
 
         search_row = ttk.Frame(right)
         search_row.pack(fill="x")
@@ -178,7 +186,8 @@ class InventoryApp:
             from .service import scan_windows
             result = scan_windows(windows, pid, limits, include_text)
             scan_id = self.db.save(result)
-            self.messages.put(("complete", (scan_id, len(result.nodes), result.truncated, len(result.errors))))
+            report_path = self.db.export_txt(scan_id, default_report_path(scan_id, pid))
+            self.messages.put(("complete", (scan_id, len(result.nodes), result.truncated, len(result.errors), str(report_path.resolve()))))
         except Exception as exc:
             self.messages.put(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -192,10 +201,13 @@ class InventoryApp:
                     self.status.set(f"扫描失败：{data}")
                     messagebox.showerror("扫描失败", data)
                 else:
-                    scan_id, count, truncated, error_count = data
+                    scan_id, count, truncated, error_count, report_path = data
                     self.refresh_snapshots(select_id=scan_id)
                     self.load_snapshot(scan_id)
-                    self.status.set(f"扫描 #{scan_id} 完成：{count} 个控件，{error_count} 个窗口错误；{'已截断' if truncated else '未截断'}。")
+                    self.active_report_path = Path(report_path)
+                    self.report_label.set(f"TXT 报告：{report_path}")
+                    self.status.set(f"扫描 #{scan_id} 完成：{count} 个控件，{error_count} 个窗口错误；{'已截断' if truncated else '未截断'}。TXT 已自动生成。")
+                    self.open_text_current()
         except queue.Empty:
             pass
         self.root.after(120, self._pump)
@@ -208,6 +220,8 @@ class InventoryApp:
     def load_snapshot(self, scan_id: int) -> None:
         record = self.db.get(scan_id)
         self.active_scan_id = scan_id
+        self.active_report_path = default_report_path(scan_id, record["pid"]).resolve()
+        self.report_label.set(f"TXT 报告：{self.active_report_path}")
         self.current_nodes = {n["id"]: n for n in record["nodes"]}
         self.tree.delete(*self.tree.get_children())
         for node in record["nodes"]:
@@ -266,6 +280,34 @@ class InventoryApp:
             self.tree.selection_set(iid)
             self.tree.see(iid)
             self.tree.focus(iid)
+
+    def open_text_current(self) -> None:
+        if self.active_scan_id is None:
+            messagebox.showinfo("没有扫描", "请先选择一个扫描记录。")
+            return
+        try:
+            path = self.active_report_path or default_report_path(self.active_scan_id, self.db.get(self.active_scan_id)["pid"])
+            if not path.is_file():
+                path = self.db.export_txt(self.active_scan_id, path)
+            self.active_report_path = path.resolve()
+            self.report_label.set(f"TXT 报告：{self.active_report_path}")
+            os.startfile(str(path))
+        except Exception as exc:
+            messagebox.showerror("打开 TXT 失败", f"{exc}\n可以使用‘另存 TXT’将报告保存到指定位置。")
+
+    def export_text_current(self) -> None:
+        if self.active_scan_id is None:
+            messagebox.showinfo("没有扫描", "请先选择一个扫描记录。")
+            return
+        dest = filedialog.asksaveasfilename(
+            title="将扫描结果保存为可阅读的 TXT",
+            initialfile=f"scan-{self.active_scan_id}.txt",
+            defaultextension=".txt", filetypes=[("文本文件", "*.txt")],
+        )
+        if dest:
+            self.db.export_txt(self.active_scan_id, dest)
+            self.report_label.set(f"TXT 已另存：{Path(dest).resolve()}")
+            self.status.set(f"已导出 TXT：{dest}")
 
     def export_current(self) -> None:
         if self.active_scan_id is None:

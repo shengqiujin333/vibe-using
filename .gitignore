@@ -12,3 +12,6 @@ scan-*.json
 exports/
 dist/
 build/
+
+# Local readable scan outputs (may contain window titles)
+scans/

@@ -120,3 +120,9 @@ class InventoryDB:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(self.get(scan_id), ensure_ascii=False, indent=2), encoding="utf-8")
         return dest
+
+    def export_txt(self, scan_id: int, path: str | Path) -> Path:
+        """Export a readable indented TXT; no SQLite viewer required."""
+        from .text_report import save_text_report
+
+        return save_text_report(self.get(scan_id), path)

@@ -199,7 +199,8 @@ class InventoryApp:
             result = scan_windows(windows, pid, limits, include_text)
             scan_id = self.db.save(result)
             report_path = self.db.export_txt(scan_id, default_report_path(scan_id, pid))
-            self.messages.put(("complete", (scan_id, len(result.nodes), result.truncated, len(result.errors), str(report_path.resolve()))))
+            self.messages.put(("complete", (scan_id, len(result.nodes), result.truncated, len(result.errors), str(report_path.resolve()),
+                                            any("扫描不完整" in error for error in result.errors))))
         except Exception as exc:
             self.messages.put(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -213,13 +214,16 @@ class InventoryApp:
                     self.status.set(f"扫描失败：{data}")
                     messagebox.showerror("扫描失败", data)
                 else:
-                    scan_id, count, truncated, error_count, report_path = data
+                    scan_id, count, truncated, error_count, report_path, incomplete = data
                     self.refresh_snapshots(select_id=scan_id)
                     self.load_snapshot(scan_id)
                     self.active_report_path = Path(report_path)
                     self.report_label.set(f"TXT 报告：{report_path}")
-                    self.status.set(f"扫描 #{scan_id} 完成：{count} 个控件，{error_count} 个窗口错误；{'已截断' if truncated else '未截断'}。TXT 已自动生成。")
+                    self.status.set((f"警告：扫描 #{scan_id} 只获取到了窗口外壳，请查看 TXT 中的扫描诊断。" if incomplete
+                                     else f"扫描 #{scan_id} 完成：{count} 个控件，{error_count} 条诊断；{'已截断' if truncated else '未截断'}。TXT 已自动生成。"))
                     self.open_text_current()
+                    if incomplete:
+                        messagebox.showwarning("界面内容未读取", "Chromium 内部控件树未获取，本次结果不是完整的软件界面。\n已尝试辅助功能激活，请查看 TXT 顶部警告和文末诊断。")
         except queue.Empty:
             pass
         self.root.after(120, self._pump)
@@ -243,7 +247,11 @@ class InventoryApp:
                             f"控件 {len(record['nodes'])}，其中候选交互控件 {record['summary']['action_candidates']}；"
                             f"截断={record['truncated']}\n注意：只能识别当前可见的窗口与暴露的结构，未验证功能意义。")
         self.details.configure(state="disabled")
-        self.status.set(f"已载入扫描 #{scan_id}（{len(record['nodes'])} 个控件）。")
+        from .chromium_recovery import missing_chromium_contents_data
+        if missing_chromium_contents_data(record["nodes"]):
+            self.status.set(f"警告：扫描 #{scan_id} 的 Chromium 内容树缺失（{len(record['nodes'])} 个外壳节点）。")
+        else:
+            self.status.set(f"已载入扫描 #{scan_id}（{len(record['nodes'])} 个控件）。")
 
     def render_tree(self) -> None:
         """Show positive-size controls plus ancestors by default; all UIA nodes remain saved."""

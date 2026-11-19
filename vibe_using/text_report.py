@@ -7,6 +7,7 @@ from typing import Any
 
 from .models import ScanResult
 from .control_visibility import location_explanation, location_status, is_property_control
+from .chromium_recovery import missing_chromium_contents_data
 
 
 # Windows will display this file beside the terminal working directory.
@@ -71,6 +72,14 @@ def format_text_report(record: dict[str, Any] | ScanResult) -> str:
         lines.append(f"扫描编号: {data['scan_id']}")
     if data.get("created_utc"):
         lines.append(f"扫描时间(UTC): {_clean(data['created_utc'])}")
+    if missing_chromium_contents_data(nodes):
+        lines.extend([
+            "",
+            "【警告】此次未获得 Chromium 内部控件树；下面的空清单不是软件没有功能。",
+            "当前只看到了窗口外壳。请先检查软件是否最小化，再重新扫描。",
+            "如果重新扫描仍无内容，请查看文末扫描诊断与 Chromium 辅助功能提示。",
+            "",
+        ])
     lines.extend([
         f"窗口: {len(windows)} | UIA 控件: {len(nodes)} | 有名称: {len(named)} | 候选交互: {len(candidates)} | 有名称的功能/菜单入口: {len(listed)}",
         f"可定位的非属性入口: {len(visible_entries)} | 可定位的属性控件: {len(property_entries)} | 无法定位/屏幕外的入口: {len(unlocatable_entries)}",
@@ -161,7 +170,7 @@ def format_text_report(record: dict[str, Any] | ScanResult) -> str:
     if not windows:
         lines.extend(["(没有发现可扫描窗口)", ""])
     if data.get("errors"):
-        lines.extend(["扫描错误", "-" * 65])
+        lines.extend(["扫描诊断 / 异常", "-" * 65])
         lines.extend(f"- {_clean(error)}" for error in data["errors"])
     return "\n".join(lines).rstrip() + "\n"
 

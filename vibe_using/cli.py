@@ -60,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
             db.export_json(scan_id, args.output)
         print(format_text_report(output))
         print(f"TXT 已保存: {report_path.resolve()}")
+        if any("扫描不完整" in error for error in result.errors):
+            print("警告：Chromium 内容树未获取，报告仅含窗口外壳。", file=sys.stderr)
+            return 3
         return 0
     if args.export_scan is not None or args.export_txt is not None or args.search is not None:
         db = InventoryDB(args.db)

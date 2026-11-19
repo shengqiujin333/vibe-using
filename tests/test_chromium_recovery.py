@@ -84,6 +84,41 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(missing_chromium_contents(r))
         self.assertTrue(missing_chromium_contents_data(r.to_dict()["nodes"]))
 
+    def test_renderer_fallback_requires_meaningful_children(self):
+        """A bigger tree of anonymous panes cannot masquerade as recovered UI."""
+        attempts = []
+        class HwAdapter(Adapter):
+            def from_handle(self, hwnd):
+                if hwnd == 99:
+                    return C("PaneControl", cls="Chrome_RenderWidgetHostHWND", children=[
+                        C("PaneControl", children=[C("PaneControl") for _ in range(15)])
+                    ])
+                return hollow()
+        result = scan_with_recovery(self.windows, 22, self.limits, lambda: HwAdapter(hollow()),
+                                    lambda _: ActivationResult(handles=(99,), signaled=1), delay=lambda _: None)
+        self.assertTrue(any("扫描不完整" in error for error in result.errors))
+        self.assertEqual(result.windows[0].hwnd, 88)
+
+    def test_renderer_fallback_accepts_named_document_content(self):
+        class HwAdapter(Adapter):
+            def from_handle(self, hwnd):
+                if hwnd == 99:
+                    return C("PaneControl", cls="Chrome_RenderWidgetHostHWND", children=[
+                        C("DocumentControl", children=[
+                            C("MenuItemControl", "File"), C("MenuItemControl", "Export"),
+                            C("GroupControl", "Toolbar"), C("GroupControl", "Canvas"),
+                            C("TextControl", "Status"), C("TextControl", "View"),
+                        ])
+                    ])
+                return hollow()
+        result = scan_with_recovery(self.windows, 22, self.limits, lambda: HwAdapter(hollow()),
+                                    lambda _: ActivationResult(handles=(99,), signaled=1), delay=lambda _: None)
+        self.assertEqual(result.windows[0].hwnd, 99)
+        self.assertEqual(result.title, "Editor")
+        self.assertTrue(any("内嵌界面" in error for error in result.errors))
+        self.assertIn("Export", [n.name for n in result.nodes])
+        self.assertFalse(any("扫描不完整" in error for error in result.errors))
+
     def test_rich_chromium_tree_has_no_false_warning(self):
         from vibe_using.scanner import scan_process
         r = scan_process(self.windows, 22, Adapter(full()))

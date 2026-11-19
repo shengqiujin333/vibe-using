@@ -40,7 +40,13 @@ def scan_with_recovery(
         for hwnd in attempt.handles[:4]:
             child = WindowInfo(hwnd=hwnd, pid=pid, title="Chromium 内嵌渲染界面（辅助入口）")
             candidate = scan_process([child], pid, adapter_factory(), limits)
-            if not missing_chromium_contents(candidate) and len(candidate.nodes) > len(recovered.nodes):
+            # A child HWND with just more anonymous PaneControl nodes is NOT a
+            # successful recovery. Require actual content evidence.
+            named_actions = sum(bool(n.name) and n.action_candidate for n in candidate.nodes)
+            named_content = sum(bool(n.name) and n.parent_id is not None for n in candidate.nodes)
+            if (len(candidate.nodes) > len(recovered.nodes) and
+                (named_actions > 0 or named_content >= 3 or
+                 any(n.role == "DocumentControl" for n in candidate.nodes))):
                 candidate.title = first.title
                 candidate.errors.append("注意：通过子渲染窗口采集，结果是内嵌界面，不是另一个顶层窗口。")
                 return candidate

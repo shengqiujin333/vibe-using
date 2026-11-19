@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibe-using"
+version = "0.1.0"
+description = "Read-only Windows UI Automation inventory and searchable local knowledge base"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "vibe-using contributors"}]
+dependencies = ["uiautomation>=2.0.0,<3.0.0; sys_platform == 'win32'"]
+
+[project.scripts]
+vibe-using = "vibe_using.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["vibe_using*"]
